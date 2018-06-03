@@ -19,4 +19,5 @@
 .vs/
 build/*
 Assets/OpenCVForUnity/
+Assets/OpenCVForUnity.meta
 Assets/StreamingAssets/
