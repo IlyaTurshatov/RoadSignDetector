@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 #if UNITY_5_3 || UNITY_5_3_OR_NEWER
 using UnityEngine.SceneManagement;
@@ -9,17 +10,14 @@ using OpenCVForUnity;
 
 public class SignDetector : MonoBehaviour
 {
-
+    public GameObject imgPrefub;
+    public Transform imgPanel;
     CCircleDetectorModel model;
 
     // Use this for initialization
     void Start()
     {
-        //if true, The error log of the Native side OpenCV will be displayed on the Unity Editor Console.
-        Utils.setDebugMode(true);
-
         Texture2D imgTexture = Resources.Load("120km") as Texture2D;
-
         Mat imgMat = new Mat(imgTexture.height, imgTexture.width, CvType.CV_8UC4);
         Utils.texture2DToMat(imgTexture, imgMat);
         // Initial algo parameters
@@ -31,25 +29,40 @@ public class SignDetector : MonoBehaviour
 
         model.lowerHue = 102;
         model.upperHue = 156;
-        model.lowerSaturation = 91;
-        model.upperSaturation = 90;
+        model.lowerSaturation = 0;
+        model.upperSaturation = 255;
         model.lowerVariance = 62;
         model.upperVariance = 60;
         model.cannyTreshold = 128;
 
-        ProcessImage();
+        lowerHue = model.lowerHue;
+        upperHue = model.upperHue;
+        lowerSaturation = model.lowerSaturation;
+        upperSaturation = model.upperSaturation;
+        lowerVariance = model.lowerVariance;
+        upperVariance = model.upperVariance;
+        cannyTreshold = model.cannyTreshold;
 
-        Utils.setDebugMode(false);
+        ProcessImage();
     }
 
-    void ProcessImage()
+
+    public void ProcessImage()
     {
         Mat processedImg = FindCirclesAndDisplay(ref model);
         Texture2D texture = new Texture2D(processedImg.cols(), processedImg.rows(), TextureFormat.RGBA32, false);
         Utils.matToTexture2D(processedImg, texture);
 
-        gameObject.GetComponent<Renderer>().material.mainTexture = texture;
+        //gameObject.GetComponent<Renderer>().material.mainTexture = texture;
     }
+
+    public float lowerHue { get; set; }
+    public float upperHue { get; set; }
+    public float lowerSaturation { get; set; }
+    public float upperSaturation { get; set; }
+    public float lowerVariance { get; set; }
+    public float upperVariance { get; set; }
+    public float cannyTreshold { get; set; }
 
 
     Mat FindCirclesAndDisplay(ref CCircleDetectorModel pCircleDetectorModel)
@@ -61,14 +74,6 @@ public class SignDetector : MonoBehaviour
         List<Mat> vChannels = new List<Mat>(3);     // 3 channels
         Core.split(imgHsv, vChannels);
 
-        int lowerHue = pCircleDetectorModel.lowerHue;
-        int upperHue = pCircleDetectorModel.upperHue;
-        int lowerSaturation = pCircleDetectorModel.lowerSaturation;
-        int upperSaturation = pCircleDetectorModel.upperSaturation;
-        int lowerVariance = pCircleDetectorModel.lowerVariance;
-        int upperVariance = pCircleDetectorModel.upperVariance;
-        int cannyTreshold = pCircleDetectorModel.cannyTreshold;
-
         Mat thresholdedHue = new Mat(vChannels[0].size(), vChannels[0].type());
         Mat thresholdedSat = new Mat(vChannels[1].size(), vChannels[1].type());
         Mat thresholdedVar = new Mat(vChannels[2].size(), vChannels[2].type());
@@ -76,6 +81,11 @@ public class SignDetector : MonoBehaviour
         Core.inRange(vChannels[0], new Scalar(lowerHue), new Scalar(upperHue), thresholdedHue);
         Core.inRange(vChannels[1], new Scalar(lowerSaturation), new Scalar(upperSaturation), thresholdedSat);
         Core.inRange(vChannels[2], new Scalar(lowerVariance), new Scalar(upperVariance), thresholdedVar);
+
+
+        ShowImage(thresholdedHue, "thresholdedHue");
+        ShowImage(thresholdedSat, "thresholdedSat");
+        ShowImage(thresholdedVar, "thresholdedVar");
 
         Mat imgResult = new Mat(vChannels[0].size(), pSourceImage.type());
         {
@@ -88,19 +98,17 @@ public class SignDetector : MonoBehaviour
             Core.merge(channels, imgResult);
         }
 
-        ShowImage(imgResult, "ChannelsFilter", 2);
 
         Imgproc.medianBlur(imgResult, imgResult, 5);
-        ShowImage(imgResult, "medianBlur", 3);
-
-
         Imgproc.threshold(imgResult, imgResult, 128, 255, Imgproc.THRESH_BINARY_INV);
 
-        //List<Vector3> circles;   //  vector that stores sets of 3 values: x_{c}, y_{c}, r for each detected circle
         Mat circles = new Mat(imgResult.size(), imgResult.type());
 
         Imgproc.cvtColor(imgResult, imgResult, Imgproc.COLOR_HSV2RGB);
+
         Imgproc.cvtColor(imgResult, imgResult, Imgproc.COLOR_RGB2GRAY);
+
+        ShowImage(imgResult, "GRAY");
 
 
         Imgproc.HoughCircles(imgResult,
@@ -113,20 +121,21 @@ public class SignDetector : MonoBehaviour
                      pCircleDetectorModel.minRadius,
                      pCircleDetectorModel.maxRadius);
 
-        ShowImage(circles, "Circles", 4);
+        ShowImage(circles, "circles");
 
         //pCircleDetectorModel.image = imgResult;
         return imgResult;
     }
 
-    void ShowImage(Mat mat, string name, int quadNumber)
+    void ShowImage(Mat mat, string name = "")
     {
-        var g = GameObject.Find("Quad" + quadNumber);
-        //g.name = name;
+        var g1 = GameObject.Instantiate(imgPrefub, imgPanel);
         Texture2D texture = new Texture2D(mat.cols(), mat.rows(), TextureFormat.RGBA32, false);
         Utils.matToTexture2D(mat, texture);
-        g.GetComponent<Renderer>().material.color = Color.white;
-        g.GetComponent<Renderer>().material.mainTexture = texture;
+        var img = g1.GetComponent<Image>();
+        var rect = new UnityEngine.Rect(0, 0, texture.width, texture.height);
+        img.overrideSprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f));
+        g1.GetComponentInChildren<UnityEngine.UI.Text>().text = name;
     }
 
     struct CCircleDetectorModel
@@ -148,5 +157,7 @@ public class SignDetector : MonoBehaviour
 
         public int cannyTreshold;
     };
+
+
 }
 
